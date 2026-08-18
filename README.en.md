@@ -1,6 +1,7 @@
 # Local Knowledge Base System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/qy24/local-knowledge-base/actions/workflows/ci.yml/badge.svg)](https://github.com/qy24/local-knowledge-base/actions/workflows/ci.yml)
 
 > Open-source positioning: this project provides the **overall design ideas and an extensible framework** for knowledge base systems — feel free to build upon it.
 

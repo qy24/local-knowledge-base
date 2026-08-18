@@ -1,6 +1,7 @@
 # 本地知识库系统（Local Knowledge Base System）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/qy24/local-knowledge-base/actions/workflows/ci.yml/badge.svg)](https://github.com/qy24/local-knowledge-base/actions/workflows/ci.yml)
 🌐 [English README](README.en.md)
 
 > 开源定位：本项目提供知识库系统的**整体思路与可扩展框架**，欢迎大家二次开发。
