@@ -74,7 +74,7 @@ def process_document(db: Session, doc_id: int, settings: Settings) -> dict:
     vectors = []
     for i in range(0, len(texts), settings.embedding_batch_size):
         batch = texts[i:i + settings.embedding_batch_size]
-        vectors.extend(embedder.embed(batch))
+        vectors.extend(embedder.embed_documents(batch))
         doc.status = "向量化中"
         db.commit()
     for cr, vec in zip(chunk_rows, vectors):
@@ -152,7 +152,7 @@ def reembed_chunk(db: Session, chunk_id: int, settings: Settings) -> None:
     kb = db.get(KnowledgeBase, chunk.kb_id)
     embedder = get_embedder(settings, kb.embedding_model if kb else "")
     vstore = get_vector_store(settings)
-    vec = embedder.embed([chunk.content])[0]
+    vec = embedder.embed_documents([chunk.content])[0]
     doc = db.get(Document, chunk.doc_id)
     page = chunk.meta.get("page", 1)
     vstore.upsert(

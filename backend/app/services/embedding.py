@@ -16,6 +16,14 @@ class Embedder(ABC):
     @abstractmethod
     def embed(self, texts: list[str]) -> list[list[float]]: ...
 
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """入库（文档侧）嵌入：指令式模型可在此加 passage 前缀"""
+        return self.embed(texts)
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        """检索（查询侧）嵌入：指令式模型可在此加 query 前缀"""
+        return self.embed(texts)
+
 
 class OpenAICompatEmbedder(Embedder):
     def __init__(self, settings: Settings):
@@ -24,8 +32,11 @@ class OpenAICompatEmbedder(Embedder):
         self.model = settings.embedding_model
         self.dim = settings.embedding_dim
         self._batch = settings.embedding_batch_size
+        # Qwen3-Embedding 等指令式模型：查询/文档推荐加前后缀
+        self._query_prefix = settings.embedding_query_prefix or ""
+        self._passage_prefix = settings.embedding_passage_prefix or ""
 
-    def embed(self, texts: list[str]) -> list[list[float]]:
+    def _request(self, texts: list[str]) -> list[list[float]]:
         out: list[list[float]] = []
         for i in range(0, len(texts), self._batch):
             batch = texts[i:i + self._batch]
@@ -33,13 +44,26 @@ class OpenAICompatEmbedder(Embedder):
                 f"{self.base_url}/embeddings",
                 headers={"Authorization": f"Bearer {self.api_key}"},
                 json={"model": self.model, "input": batch},
-                timeout=120,
+                timeout=600,  # 本地大模型（Ollama）首次加载可能较慢
             )
             resp.raise_for_status()
             data = resp.json()["data"]
             data.sort(key=lambda x: x["index"])
             out.extend(d["embedding"] for d in data)
         return out
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        return self._request(texts)
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        if self._passage_prefix:
+            texts = [self._passage_prefix + t for t in texts]
+        return self._request(texts)
+
+    def embed_queries(self, texts: list[str]) -> list[list[float]]:
+        if self._query_prefix:
+            texts = [self._query_prefix + t for t in texts]
+        return self._request(texts)
 
 
 class DummyEmbedder(Embedder):

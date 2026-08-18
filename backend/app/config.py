@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
     embedding_batch_size: int = 16
+    # 指令式嵌入模型（如 Qwen3-Embedding）推荐的前后缀；空则不加
+    embedding_query_prefix: str = ""
+    embedding_passage_prefix: str = ""
 
     # 云端大模型（OpenAI 兼容）
     llm_base_url: str = "https://api.openai.com/v1"

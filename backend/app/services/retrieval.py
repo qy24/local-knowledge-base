@@ -32,7 +32,7 @@ def search_knowledge(
     gstore = get_graph_store(settings)
 
     # 1) 向量检索（服务端强制 kb 过滤）
-    query_vec = embedder.embed([query])[0]
+    query_vec = embedder.embed_queries([query])[0]
     hits = vstore.search(query_vec, allowed, top_k * 2)
 
     # 2) 图谱检索：查询实体 + 子图扩展
