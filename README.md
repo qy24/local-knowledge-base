@@ -3,6 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 🌐 [English README](README.en.md)
 
+> 开源定位：本项目提供知识库系统的**整体思路与可扩展框架**，欢迎大家二次开发。
+
 部署在单机 Windows 上的可视化知识库系统：管理员上传文档，系统自动完成 **解析 → 切分 → 向量化 → 知识图谱构建**；对外提供 **REST / OpenAI 兼容聚合端点 / MCP**，供多台远程电脑上的云端大模型 / AI Agent 调用本地知识生成回答。
 
 **多租户权限隔离（核心）**：每台电脑持独立 API 密钥，只能检索绑定给它的知识库数据（服务端强制过滤，无法越权）。
@@ -192,6 +194,10 @@ knowledge-base/
 
 - P5 收尾：效果调优（rerank 按需开启）、真实云端 LLM/Embedding 的长期运行观测
 - 10 并发压测已通过（P95 < 2s，见 `backend/tests/test_live_server.py`）
+
+## 开源说明与二次开发
+
+本项目以 **MIT 协议**开源，定位为**参考实现**：提供知识库系统的**整体思路与可扩展框架**——从文档解析、文本切分、向量化、知识图谱、混合检索，到多租户密钥权限、审计日志与 MCP 接入的完整链路。欢迎大家 **Fork 并在其基础上二次开发**，定制属于自己的知识库系统；欢迎提交 Issues、PR 与改进建议。
 
 ## 联系作者 / Contact
 

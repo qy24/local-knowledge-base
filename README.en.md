@@ -2,6 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> Open-source positioning: this project provides the **overall design ideas and an extensible framework** for knowledge base systems — feel free to build upon it.
+
 A **self-hosted, visual knowledge base system** that runs on a single Windows machine (no GPU required). Upload documents, and the system automatically performs **parsing → chunking → vectorization → knowledge graph construction**, then serves the knowledge to cloud LLMs / AI agents through **REST, OpenAI-compatible, and MCP** interfaces for knowledge-augmented Q&A.
 
 > The web UI is a **data management & visualization console** (not a chat frontend). Answer generation is done by each client's own cloud LLM, which calls this system to retrieve knowledge.
@@ -90,6 +92,10 @@ knowledge-base/
 ├── scripts/       # toggle bat, backup, tests, format demo
 └── docs/          # design document (Chinese, v0.3)
 ```
+
+## Open Source & Secondary Development
+
+This project is open-sourced under the **MIT license** and positioned as a **reference implementation**: it provides the **overall design ideas and an extensible framework** for building a knowledge base system — from document parsing, chunking, vectorization, knowledge graph and hybrid retrieval, to multi-tenant API-key isolation, audit logging and MCP integration. Feel free to **fork and build your own** knowledge base on top of it; Issues, PRs and suggestions are welcome.
 
 ## License
 
