@@ -1,6 +1,7 @@
 # 本地知识库系统（Local Knowledge Base System）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+🌐 [English README](README.en.md)
 
 部署在单机 Windows 上的可视化知识库系统：管理员上传文档，系统自动完成 **解析 → 切分 → 向量化 → 知识图谱构建**；对外提供 **REST / OpenAI 兼容聚合端点 / MCP**，供多台远程电脑上的云端大模型 / AI Agent 调用本地知识生成回答。
 

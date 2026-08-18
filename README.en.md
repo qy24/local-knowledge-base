@@ -1,0 +1,96 @@
+# Local Knowledge Base System
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A **self-hosted, visual knowledge base system** that runs on a single Windows machine (no GPU required). Upload documents, and the system automatically performs **parsing → chunking → vectorization → knowledge graph construction**, then serves the knowledge to cloud LLMs / AI agents through **REST, OpenAI-compatible, and MCP** interfaces for knowledge-augmented Q&A.
+
+> The web UI is a **data management & visualization console** (not a chat frontend). Answer generation is done by each client's own cloud LLM, which calls this system to retrieve knowledge.
+
+## What it does
+
+- **Document pipeline**: PDF / DOCX / Markdown / HTML / TXT / PPTX / XLSX → text blocks → chunks (with page/heading metadata) → embeddings → knowledge graph (entities & relations extracted by LLM)
+- **Hybrid retrieval**: vector similarity + knowledge graph traversal, fused and ranked, with source citations
+- **Multi-tenant permission isolation (core)**: each client holds an independent API key bound to its own knowledge bases; retrieval is **enforced server-side** by `kb_id` filters (vector store payload + graph Cypher) — clients cannot exceed their scope
+- **Three integration interfaces**:
+  - `POST /api/v1/knowledge/search` — hybrid retrieval REST API
+  - `POST /api/v1/chat/completions` — OpenAI-compatible aggregate endpoint (local retrieval + cloud LLM generation)
+  - **MCP Server** at `POST /mcp` — works with Claude Desktop / Cursor / Dify / custom agents
+- **Human-in-the-loop graph curation**: review, edit, delete and **merge entities** in a G6 canvas; mark them `verified` to boost retrieval ranking
+- **Audit log** for every search/admin operation; API keys are revocable, expirable and stored hashed
+
+## Tech stack
+
+| Layer | Choice |
+|---|---|
+| Backend | Python 3.11+ / FastAPI / SQLAlchemy |
+| Frontend | Vue 3 + TypeScript + Vite + Element Plus + AntV G6 |
+| Storage | SQLite (dev) / PostgreSQL + Qdrant + Neo4j (production) |
+| Embedding | Cloud OpenAI-compatible API (default) / local bge-m3 (fallback) |
+| LLM | Any OpenAI-compatible endpoint (DeepSeek / Qwen / GLM / OpenAI / Kimi...) |
+| Task queue | In-process asyncio + tasks table (no Redis) |
+
+## Quick start (dev mode, no external services)
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt
+# copy .env.example to .env; offline dev can set EMBEDDING_MODE=dummy
+.\.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+```powershell
+cd frontend
+npm install
+npm run dev          # http://127.0.0.1:5173, proxies /api to :8000
+```
+
+Production: `npm run build`, then the backend serves `frontend/dist` automatically (open `http://127.0.0.1:8000`).
+
+- API docs: `http://127.0.0.1:8000/docs`
+- Default admin: `admin / admin123` (created on first start — **change it in production**)
+
+## Tests
+
+```powershell
+cd knowledge-base
+.\scripts\run_tests.ps1    # smoke test + cloud-integration/MCP/10-concurrency test
+```
+
+Covers: upload → parse/chunk/vectorize → retrieval → **tenant isolation** → key revocation → audit → cascade delete; OpenAI-compatible code paths (against a fake server), LLM graph extraction, entity merge, MCP protocol, and a **10-concurrent-request benchmark (P95 < 2s)**.
+
+## Multi-tenant permissions
+
+- Every request resolves the `Bearer` key to its authorized `kb_ids` server-side
+- Vector search and graph traversal are both filtered by the authorized scope — client parameters cannot widen it
+- Keys are stored as hashes; revocation takes effect immediately; everything is audited
+
+## Production deployment
+
+```ini
+# backend/.env
+DATABASE_URL=postgresql+psycopg2://user:pass@localhost/kb
+VECTOR_BACKEND=qdrant
+GRAPH_BACKEND=neo4j
+EMBEDDING_MODE=openai
+LLM_API_KEY=sk-xxx
+```
+
+Or use Docker: `docker compose -f deploy/docker-compose.yml up -d` (postgres + qdrant + neo4j + backend).
+
+Backup: `.\scripts\backup.ps1` (SQLite + documents + local vector/graph data → zip).
+
+## Project layout
+
+```
+knowledge-base/
+├── backend/       # FastAPI app, services, stores, tests
+├── frontend/      # Vue 3 management console
+├── deploy/        # Docker Compose + Dockerfile
+├── scripts/       # toggle bat, backup, tests, format demo
+└── docs/          # design document (Chinese, v0.3)
+```
+
+## License
+
+[MIT](LICENSE)
