@@ -1,0 +1,130 @@
+<template>
+  <div class="page-card">
+    <div class="toolbar">
+      <el-button type="primary" @click="dialog = true">创建密钥</el-button>
+      <span style="color: #909399; font-size: 12px">
+        每个租户（电脑）持独立密钥，只能检索绑定知识库的数据
+      </span>
+    </div>
+
+    <el-table :data="keys" border>
+      <el-table-column prop="id" label="ID" width="60" />
+      <el-table-column prop="name" label="名称" min-width="120" />
+      <el-table-column prop="key_type" label="类型" width="90">
+        <template #default="{ row }">
+          <el-tag size="small">{{ row.key_type }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="绑定知识库" min-width="200">
+        <template #default="{ row }">
+          <el-tag
+            v-for="kb in row.allowed_kb_ids"
+            :key="kb"
+            size="small"
+            style="margin-right: 4px"
+          >
+            {{ kbName(kb) }}
+          </el-tag>
+          <span v-if="row.allowed_kb_ids.length === 0" style="color: #f56c6c; font-size: 12px">未绑定（无法检索）</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.revoked ? 'danger' : 'success'" size="small">
+            {{ row.revoked ? '已吊销' : '有效' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="last_used_at" label="最近使用" width="170">
+        <template #default="{ row }">{{ row.last_used_at || '—' }}</template>
+      </el-table-column>
+      <el-table-column label="操作" width="140">
+        <template #default="{ row }">
+          <el-button v-if="!row.revoked" size="small" type="danger" link @click="revoke(row)">吊销</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-dialog v-model="dialog" title="创建密钥" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="名称" required><el-input v-model="form.name" placeholder="如：电脑1" /></el-form-item>
+        <el-form-item label="类型">
+          <el-select v-model="form.key_type">
+            <el-option label="search（只读检索）" value="search" />
+            <el-option label="full（检索+管理）" value="full" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="绑定知识库">
+          <el-select v-model="form.allowed_kb_ids" multiple style="width: 100%">
+            <el-option v-for="k in kbs" :key="k.id" :label="k.name" :value="k.id" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialog = false">取消</el-button>
+        <el-button type="primary" @click="create">创建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="plainDialog" title="密钥创建成功（仅显示一次，请立即保存）" width="560px">
+      <el-input v-model="plainKey" readonly class="mono">
+        <template #append><el-button @click="copyKey">复制</el-button></template>
+      </el-input>
+      <p style="color: #e6a23c; font-size: 12px">关闭后无法再次查看明文，遗失需重新创建。</p>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import client from '../api/client'
+import type { ApiKeyItem, KB } from '../api/types'
+
+const keys = ref<ApiKeyItem[]>([])
+const kbs = ref<KB[]>([])
+const dialog = ref(false)
+const plainDialog = ref(false)
+const plainKey = ref('')
+const form = reactive({ name: '', key_type: 'search', allowed_kb_ids: [] as number[] })
+
+// 知识库 ID -> 名称（按"知识库管理"中的名称展示；查不到时兜底显示 #ID）
+function kbName(id: number): string {
+  const k = kbs.value.find((x) => x.id === id)
+  return k ? k.name : `#${id}`
+}
+
+async function load() {
+  const { data } = await client.get('/admin/keys')
+  keys.value = data
+}
+
+async function create() {
+  if (!form.name) return
+  const { data } = await client.post('/admin/keys', form)
+  plainKey.value = data.key || ''
+  plainDialog.value = true
+  dialog.value = false
+  form.name = ''
+  form.allowed_kb_ids = []
+  load()
+}
+
+function copyKey() {
+  navigator.clipboard?.writeText(plainKey.value)
+  ElMessage.success('已复制')
+}
+
+async function revoke(row: ApiKeyItem) {
+  await ElMessageBox.confirm(`吊销密钥「${row.name}」？吊销后立即失效。`, '警告', { type: 'warning' })
+  await client.post(`/admin/keys/${row.id}/revoke`)
+  ElMessage.success('已吊销')
+  load()
+}
+
+onMounted(async () => {
+  const { data } = await client.get('/admin/kbs')
+  kbs.value = data
+  await load()
+})
+</script>

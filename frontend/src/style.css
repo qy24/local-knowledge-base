@@ -1,0 +1,23 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  font-family: 'Microsoft YaHei', 'PingFang SC', 'Helvetica Neue', Arial, sans-serif;
+}
+
+.page-card {
+  margin: 12px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.mono {
+  font-family: Consolas, 'Courier New', monospace;
+}

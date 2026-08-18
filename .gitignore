@@ -1,0 +1,37 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# ===== 运行时数据（本地知识库数据，勿提交）=====
+backend/data/
+data/
+backups/
+
+# ===== 环境配置（含密钥，勿提交）=====
+backend/.env
+.env
+!.env.example
+
+# ===== 前端 =====
+frontend/node_modules/
+frontend/dist/
+
+# ===== 测试/调试产物 =====
+*.db
+*.sqlite
+test_live.db
+test_live_data/
+test_smoke.db
+test_data/
+demo_维护手册.md
+
+# ===== 系统 =====
+Thumbs.db
+.DS_Store
+*.log
