@@ -90,7 +90,7 @@ knowledge-base/
 ├── backend/       # FastAPI app, services, stores, tests
 ├── frontend/      # Vue 3 management console
 ├── deploy/        # Docker Compose + Dockerfile
-└── scripts/       # toggle bat, backup, tests, format demo
+└── scripts/       # start bat, backup, tests, format demo
 ```
 
 ## Open Source & Secondary Development
