@@ -94,3 +94,9 @@ knowledge-base/
 ## License
 
 [MIT](LICENSE)
+
+## Contact
+
+- Author: qy24
+- Email: dakuo1003@163.com
+- Issues and PRs are welcome

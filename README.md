@@ -191,4 +191,10 @@ knowledge-base/
 ## 后续规划（见计划文档 v0.3 §8）
 
 - P5 收尾：效果调优（rerank 按需开启）、真实云端 LLM/Embedding 的长期运行观测
-- 10 并发压测已通过（P95=1.7s < 2s，见 `backend/tests/test_live_server.py`）
+- 10 并发压测已通过（P95 < 2s，见 `backend/tests/test_live_server.py`）
+
+## 联系作者 / Contact
+
+- 作者：qy24
+- 邮箱：dakuo1003@163.com
+- 欢迎 Issues / PR / 交流使用问题
