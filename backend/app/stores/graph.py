@@ -117,7 +117,8 @@ class LocalGraphStore(GraphStore):
                 }
             else:
                 self._entities[eid].setdefault("source_doc_id", source_doc_id)
-            return eid
+        self._save()
+        return eid
 
     def upsert_relation(self, kb_id: int, src_name: str, tgt_name: str,
                         rel_type: str, properties: dict,
@@ -131,6 +132,7 @@ class LocalGraphStore(GraphStore):
                 if (r["source_entity_id"] == src and r["target_entity_id"] == tgt
                         and r["relation_type"] == rel_type and r["kb_id"] == kb_id):
                     r.setdefault("source_doc_id", source_doc_id)
+                    self._save()
                     return rid
             rid = uuid.uuid4().hex
             self._relations[rid] = {
@@ -140,7 +142,8 @@ class LocalGraphStore(GraphStore):
                 "source_chunk_id": source_chunk_id, "verified": False,
                 "created_at": self._now(),
             }
-            return rid
+        self._save()
+        return rid
 
     @staticmethod
     def _now() -> str:
@@ -206,6 +209,7 @@ class LocalGraphStore(GraphStore):
                 self._entities[entity_id].update(fields)
             else:
                 raise KeyError(entity_id)
+        self._save()
 
     def update_relation(self, relation_id: str, fields: dict) -> None:
         with self._lock:
@@ -213,6 +217,7 @@ class LocalGraphStore(GraphStore):
                 self._relations[relation_id].update(fields)
             else:
                 raise KeyError(relation_id)
+        self._save()
 
     def delete_entity(self, entity_id: str) -> None:
         with self._lock:
@@ -221,6 +226,7 @@ class LocalGraphStore(GraphStore):
                 rid: r for rid, r in self._relations.items()
                 if r["source_entity_id"] != entity_id and r["target_entity_id"] != entity_id
             }
+        self._save()
 
     def merge_entities(self, from_id: str, into_id: str) -> None:
         """把 from_id 合并进 into_id：关系改指，属性合并，删除 from。"""
@@ -248,10 +254,12 @@ class LocalGraphStore(GraphStore):
                 keep[rid] = r
             self._relations = keep
             self._entities.pop(from_id, None)
+        self._save()
 
     def delete_relation(self, relation_id: str) -> None:
         with self._lock:
             self._relations.pop(relation_id, None)
+        self._save()
 
     def delete_by_doc(self, doc_id: int) -> None:
         with self._lock:
@@ -263,11 +271,13 @@ class LocalGraphStore(GraphStore):
                 rid: r for rid, r in self._relations.items()
                 if r.get("source_doc_id") != doc_id
             }
+        self._save()
 
     def delete_by_kb(self, kb_id: int) -> None:
         with self._lock:
             self._entities = {eid: e for eid, e in self._entities.items() if e["kb_id"] != kb_id}
             self._relations = {rid: r for rid, r in self._relations.items() if r["kb_id"] != kb_id}
+        self._save()
 
     def count(self) -> tuple[int, int]:
         with self._lock:
