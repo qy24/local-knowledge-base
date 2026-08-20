@@ -1,6 +1,8 @@
 """入库流水线：解析 → 切分 → 向量化 → 图谱抽取。"""
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.orm import Session
 
 from ..config import Settings
@@ -137,6 +139,42 @@ def process_document(db: Session, doc_id: int, settings: Settings) -> dict:
     else:
         _doc_status(doc, "图谱抽取中")
         db.commit()
+
+    # ⑤ 图片文档：创建"图片实体"并自动与同名实体建立"配图"关系
+    from .parsing import IMAGE_EXTS
+    if f".{doc.file_type.lower()}" in IMAGE_EXTS and chunk_rows:
+        _doc_status(doc, "图谱抽取中")
+        db.commit()
+        stem = Path(doc.filename).stem
+        image_entity_name = f"{stem}图片"
+        img_eid = gstore.upsert_entity(
+            kb_id=doc.kb_id, name=image_entity_name, etype="图片",
+            properties={"image_doc_id": doc.id, "image_file": doc.filename},
+            source_doc_id=doc.id, source_chunk_id=chunk_rows[0].id,
+        )
+        stats["entities"] += 1
+        # 自动关联：库内已有实体名是文件名主题的子串（如"产品A" ∈ "产品A"），建立 产品X -配图-> 图片实体
+        existing, _ = gstore.list_entities(doc.kb_id, 1000, 0)
+        linked = 0
+        for e in existing:
+            ename = str(e.get("name", ""))
+            if not ename or ename == image_entity_name or e.get("type") == "图片":
+                continue
+            if ename in stem:
+                try:
+                    gstore.upsert_relation(
+                        kb_id=doc.kb_id, src_name=ename, tgt_name=image_entity_name,
+                        rel_type="配图", properties={},
+                        source_doc_id=doc.id, source_chunk_id=chunk_rows[0].id,
+                    )
+                    stats["relations"] += 1
+                    linked += 1
+                except ValueError:
+                    pass
+                if linked >= 3:
+                    break
+        if linked == 0:
+            stats["relations"] += 0  # 无同名实体时仅生成图片实体，可手工在画布关联
 
     _doc_status(doc, "完成")
     doc.error_msg = ""

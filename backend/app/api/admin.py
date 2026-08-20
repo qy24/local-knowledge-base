@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import shutil
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -142,6 +143,15 @@ def get_document(doc_id: int, db: Session = Depends(get_db)):
     if doc is None:
         raise HTTPException(404, "文档不存在")
     return doc
+
+
+@router.get("/documents/{doc_id}/file")
+def get_document_file(doc_id: int, db: Session = Depends(get_db)):
+    """返回文档原件（图片/表格等），供前端图谱查看原图。"""
+    doc = db.get(Document, doc_id)
+    if doc is None or not doc.file_path or not Path(doc.file_path).exists():
+        raise HTTPException(404, "文件不存在")
+    return FileResponse(doc.file_path, filename=doc.filename)
 
 
 @router.delete("/documents/{doc_id}")

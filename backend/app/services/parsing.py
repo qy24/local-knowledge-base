@@ -103,6 +103,21 @@ def _read_xlsx(path: Path) -> list[dict]:
     return blocks
 
 
+# 图片类文档：没有可提取文本，用文件名作为内容，便于检索与图谱关联
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+
+def _read_image(path: Path) -> list[dict]:
+    name = path.stem
+    text = (
+        f"图片文件：{path.name}。"
+        f"该图片展示的内容主题为：{name}。"
+        f"（如需查看原图，请在知识图谱中点击对应的图片实体）"
+    )
+    return [{"content": text, "meta": {"page": "图片", "heading": None,
+                                       "image": True, "filename": path.name}}]
+
+
 def _table_to_markdown(rows: list[list]) -> str:
     if not rows:
         return ""
@@ -118,6 +133,8 @@ _SUPPORTED = {
     ".html": _read_plain, ".htm": _read_plain, ".pdf": _read_pdf,
     ".docx": _read_docx, ".pptx": _read_pptx, ".xlsx": _read_xlsx,
 }
+for _ext in IMAGE_EXTS:
+    _SUPPORTED[_ext] = _read_image
 
 
 def extract_blocks(file_path: str) -> list[dict]:
