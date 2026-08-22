@@ -106,6 +106,12 @@ def _get(path: str, token: str | None = None) -> httpx.Response:
         return c.get(BASE + path, headers=headers)
 
 
+def _delete(path: str, token: str | None = None) -> httpx.Response:
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
+    with httpx.Client(timeout=60, trust_env=False) as c:
+        return c.delete(BASE + path, headers=headers)
+
+
 def _wait_doc_done(token: str, doc_id: int, timeout: float = 120.0) -> dict:
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -246,6 +252,42 @@ def test_cloud_pipeline_mcp_and_concurrency():
     print(f"\n[压测] 200 次请求(10并发) | avg={statistics.mean(latencies):.1f}ms "
           f"p50={latencies[len(latencies)//2]:.1f}ms p95={p95:.1f}ms max={latencies[-1]:.1f}ms")
     assert p95 < 2000, f"P95={p95}ms 超过 2s"
+
+    # ---- 图谱检索精度回归（持久规则：按真实关系收紧，跨主题不串扰）----
+    pkb = _post("/api/admin/kbs", {"name": "精度测试", "description": ""}, token).json()["id"]
+
+    def mk_ent(name: str, etype: str) -> str:
+        return _post(f"/api/admin/kbs/{pkb}/entities", {"name": name, "type": etype}, token).json()["id"]
+
+    def mk_rel(src: str, tgt: str, rtype: str) -> None:
+        r = _post(f"/api/admin/kbs/{pkb}/relations",
+                  {"source_entity_id": src, "target_entity_id": tgt, "relation_type": rtype}, token)
+        assert r.status_code == 200, r.text
+
+    us = mk_ent("美国", "站点")
+    ca = mk_ent("加拿大", "站点")
+    us1, us2 = mk_ent("美1", "ASIN"), mk_ent("美2", "ASIN")
+    ca1, ca2 = mk_ent("加1", "ASIN"), mk_ent("加2", "ASIN")
+    brand_us = mk_ent("美牌", "品牌")
+    mk_rel(us, us1, "产品"); mk_rel(us, us2, "产品")
+    mk_rel(ca, ca1, "产品"); mk_rel(ca, ca2, "产品")
+    mk_rel(us, brand_us, "品牌")
+
+    def graph_names(q: str) -> set[str]:
+        r = _post(f"/api/admin/kbs/{pkb}/debug-search",
+                  {"query": q, "top_k": 8, "graph_depth": 1, "enable_graph": True}, token)
+        assert r.status_code == 200, r.text
+        return {e["name"] for e in r.json()["graph"]["entities"]}
+
+    # 点名站点+类型：只返回该站点自己的 ASIN，不串到其他站点
+    assert graph_names("美国站的ASIN") == {"美国", "美1", "美2"}, graph_names("美国站的ASIN")
+    assert graph_names("加拿大的ASIN") == {"加拿大", "加1", "加2"}, graph_names("加拿大的ASIN")
+    # 点名站点+关系类型：只返回该站点自己的品牌，不串到其他站点
+    assert graph_names("美国站的品牌") == {"美国", "美牌"}, graph_names("美国站的品牌")
+    assert graph_names("加拿大的品牌") == {"加拿大"}, graph_names("加拿大的品牌")  # 加拿大无品牌
+    # 纯类型列举：只返回该类型实体，不扩展邻居
+    assert graph_names("站点有哪些") == {"美国", "加拿大"}, graph_names("站点有哪些")
+    assert _delete(f"/api/admin/kbs/{pkb}", token).status_code == 200
 
     # 清理
     from app.database import engine

@@ -74,17 +74,21 @@ def search_knowledge(
                         rel_seeds.append(str(src["name"]))
                     if tgt and str(tgt.get("name", "")):
                         rel_seeds.append(str(tgt["name"]))
-        # 2a-邻域约束：查询同时点名实体与类型词时（如"美国站的ASIN"），
-        # 类型实体必须与点名实体在图谱中相连，避免跨站/跨主题误召回
-        if name_seeds and type_seeds:
+        # 2a-邻域约束：查询同时点名实体与类型/关系类型词时（如"美国站的ASIN""加拿大的品牌"），
+        # 类型实体与关系类型两端都必须与点名实体相连（1 跳内），避免跨站/跨主题误召回
+        if name_seeds and (type_seeds or rel_seeds):
             name_seed_unique = list(dict.fromkeys(name_seeds))
             nbr_entities, _ = gstore.subgraph(
-                allowed, name_seed_unique, min(max(graph_depth, 1) + 1, 3), None)
+                allowed, name_seed_unique, max(graph_depth, 1), None)
             nbr_ids = {e["id"] for e in nbr_entities}
             for n in name_seed_unique:
                 nbr_ids.update(ids_by_name.get(n, []))
             type_seeds = [
                 s for s in type_seeds
+                if set(ids_by_name.get(s, [])) & nbr_ids
+            ]
+            rel_seeds = [
+                s for s in rel_seeds
                 if set(ids_by_name.get(s, [])) & nbr_ids
             ]
         # 2b) LLM 提取查询实体（有配置时）
@@ -96,16 +100,29 @@ def search_knowledge(
                 pass
         seed_names = list(dict.fromkeys(n for n in (name_seeds + type_seeds + rel_seeds) if n))
         if seed_names:
-            # 精度控制（避免带出无关邻居）：
-            # - 纯"列举"查询（仅类型/关系类型命中，如"站点有哪些""产品"）→ 不扩展（深度0），只返回命中的实体与它们之间的关系
-            # - 指名实体查询（如"加拿大"）→ 按 graph_depth 扩展，且只沿查询中提到的关系类型展开；查询未提关系类型则不扩展
+            # ===== 检索精度规则（持久生效，数据再多也按真实关系收紧）=====
+            # 1) 只有"点名实体"（实体名命中）是扩展源：
+            #    - 按 graph_depth 扩展，且只沿查询中提到的关系类型展开；查询未提关系类型则不扩展
+            # 2) 类型/关系类型召回的实体只是"叶子"，纳入结果但不继续扩散邻居
+            #    （避免"美国站的ASIN"把加拿大站ASIN带进来、"加拿大的品牌"把美国带进来）
+            # 3) 纯"列举"查询（仅类型/关系类型命中，如"站点有哪些""产品"）→ 不扩展，只返回命中实体与其之间的关系
             if name_seeds:
                 depth_eff = graph_depth if matched_rel_types else 0
                 rel_filter = list(dict.fromkeys(matched_rel_types)) or None
+                exp_entities, exp_rels = gstore.subgraph(
+                    allowed, list(dict.fromkeys(name_seeds)), depth_eff, rel_filter)
             else:
-                depth_eff = 0
-                rel_filter = None
-            entities, relations = gstore.subgraph(allowed, seed_names, depth_eff, rel_filter)
+                exp_entities, exp_rels = [], []
+            leaf_entities, leaf_rels = gstore.subgraph(allowed, seed_names, 0, None)
+            # 合并去重：扩展结果 + 叶子种子
+            merged: dict[str, dict] = {e["id"]: e for e in exp_entities}
+            for e in leaf_entities:
+                merged[e["id"]] = e
+            merged_rels: dict[str, dict] = {r["id"]: r for r in exp_rels}
+            for r in leaf_rels:
+                merged_rels[r["id"]] = r
+            entities = list(merged.values())
+            relations = list(merged_rels.values())
             graph = {"entities": entities, "relations": relations}
             for e in entities:
                 if e.get("source_chunk_id"):
