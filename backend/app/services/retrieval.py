@@ -56,6 +56,19 @@ def search_knowledge(
                         str(e["name"]) for e in entities
                         if str(e.get("type", "")) == t and str(e.get("name", ""))
                     )
+            # 关系类型命中：查询含关系类型（如"产品"），召回该关系两端的实体
+            rels, _ = gstore.list_relations(kb_id, limit=1000, offset=0)
+            for r in rels:
+                rt = str(r.get("relation_type", ""))
+                if not rt:
+                    continue
+                if (rt in query) or (len(rt) >= 2 and rt[:2] in query):
+                    src = gstore.get_entity(str(r.get("source_entity_id", "")))
+                    tgt = gstore.get_entity(str(r.get("target_entity_id", "")))
+                    if src and str(src.get("name", "")):
+                        seed_names.append(str(src["name"]))
+                    if tgt and str(tgt.get("name", "")):
+                        seed_names.append(str(tgt["name"]))
         # 2b) LLM 提取查询实体（有配置时）
         llm = llm_svc.resolve_llm(settings)
         if llm.configured():
