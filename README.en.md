@@ -19,7 +19,7 @@ A **self-hosted, visual knowledge base system** that runs on a single Windows ma
   - `POST /api/v1/chat/completions` — OpenAI-compatible aggregate endpoint (local retrieval + cloud LLM generation)
   - **MCP Server** at `POST /mcp` — works with Claude Desktop / Cursor / Dify / custom agents
 - **Human-in-the-loop graph curation**: review, edit, delete and **merge entities** in a G6 canvas; mark them `verified` to boost retrieval ranking
-- **Images in the knowledge graph**: uploading an image auto-creates an "image entity" and links it to same-named entities (`产品A -配图-> 产品A图片`); click the image entity to view the original image
+- **Images in the knowledge graph**: uploading an image auto-creates an "image entity" and links it to same-named entities (`某产品 -配图-> 某产品图片`); click the image entity to view the original image
 - **Entity detail panel**: click an entity to **add multiple relations in a row** (direction/type/target), list/edit/delete all its relations, and **remember node positions** (auto-saved on drag)
 - **Audit log** for every search/admin operation; API keys are revocable, expirable and stored hashed
 
