@@ -13,24 +13,58 @@
     <el-alert v-if="result" type="info" :closable="false" style="margin-bottom: 12px"
               :title="`实际生效范围: 知识库 #${result.permission_scope.kb_ids.join(', ')}；图谱命中实体 ${result.graph.entities.length} 个 / 关系 ${result.graph.relations.length} 条`" />
 
-    <el-table v-if="result" :data="result.chunks" border size="small">
-      <el-table-column prop="source" label="来源" width="90">
-        <template #default="{ row }">
-          <el-tag :type="row.source === 'graph' ? 'success' : 'primary'" size="small">{{ row.source }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="score" label="分数" width="80" />
-      <el-table-column label="来源文档" width="140">
-        <template #default="{ row }">{{ result.kb_names?.[row.kb_id] }} / {{ row.metadata?.page ?? '' }}</template>
-      </el-table-column>
-      <el-table-column prop="content" label="内容" min-width="400" show-overflow-tooltip />
-    </el-table>
+    <template v-if="result">
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px"
+                :title="`实际生效范围: 知识库 #${result.permission_scope.kb_ids.join(', ')}；图谱命中实体 ${result.graph.entities.length} 个 / 关系 ${result.graph.relations.length} 条`" />
+
+      <!-- 文本命中 -->
+      <template v-if="result.chunks.length > 0">
+        <el-table :data="result.chunks" border size="small" style="margin-bottom: 12px">
+          <el-table-column prop="source" label="来源" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.source === 'graph' ? 'success' : 'primary'" size="small">{{ row.source }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="score" label="分数" width="80" />
+          <el-table-column label="来源文档" width="140">
+            <template #default="{ row }">{{ result.kb_names?.[row.kb_id] }} / {{ row.metadata?.page ?? '' }}</template>
+          </el-table-column>
+          <el-table-column prop="content" label="内容" min-width="400" show-overflow-tooltip />
+        </el-table>
+      </template>
+      <el-alert v-else type="warning" :closable="false" style="margin-bottom: 12px"
+                title="文本命中 0 条（该知识库暂无相关文档内容，以下为图谱命中）" />
+
+      <!-- 图谱命中的实体 -->
+      <el-card v-if="result.graph.entities.length > 0" shadow="never" style="margin-bottom: 12px"
+               :header="`图谱命中实体（${result.graph.entities.length}）`">
+        <el-table :data="result.graph.entities" border size="small">
+          <el-table-column prop="name" label="实体" min-width="140" />
+          <el-table-column prop="type" label="类型" width="120" />
+          <el-table-column label="已确认" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.verified ? 'success' : 'info'" size="small">{{ row.verified ? '是' : '否' }}</el-tag>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-card>
+
+      <!-- 图谱命中的关系 -->
+      <el-card v-if="result.graph.relations.length > 0" shadow="never" :header="`图谱命中关系（${result.graph.relations.length}）`">
+        <el-table :data="relRows" border size="small">
+          <el-table-column prop="label" label="关系" min-width="300" />
+        </el-table>
+      </el-card>
+
+      <el-empty v-if="result.chunks.length === 0 && result.graph.entities.length === 0 && result.graph.relations.length === 0"
+                description="未命中任何内容（可到知识库管理上传文档，或到图谱页添加实体）" />
+    </template>
     <el-empty v-else description="输入问题开始检索调试" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import client from '../api/client'
 import type { KB, SearchResult } from '../api/types'
 
@@ -40,6 +74,17 @@ const query = ref('')
 const topK = ref(8)
 const enableGraph = ref(true)
 const result = ref<SearchResult | null>(null)
+
+function entityName(id: string): string {
+  return result.value?.graph.entities.find((e) => e.id === id)?.name || id.slice(0, 8)
+}
+
+// 关系行：实体A -类型-> 实体B
+const relRows = computed(() =>
+  (result.value?.graph.relations || []).map((r) => ({
+    label: `${entityName(r.source_entity_id)} -${r.relation_type}-> ${entityName(r.target_entity_id)}`,
+  })),
+)
 
 async function run() {
   if (!kbId.value || !query.value) return
