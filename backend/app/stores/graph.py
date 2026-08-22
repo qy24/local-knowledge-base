@@ -173,7 +173,7 @@ class LocalGraphStore(GraphStore):
         }
         nodes: set[str] = set(seeds)
         frontier = set(seeds)
-        for _ in range(max(depth, 1)):
+        for _ in range(depth):  # depth=0 时不扩展，只返回种子实体
             if not frontier:
                 break
             nxt: set[str] = set()

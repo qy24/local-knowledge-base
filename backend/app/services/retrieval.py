@@ -40,45 +40,57 @@ def search_knowledge(
     graph_chunk_ids: set[int] = set()
     verified_chunk_ids: set[int] = set()
     if enable_graph and allowed:
-        seed_names: list[str] = []
-        # 2a) 字符串命中实体名 + 实体类型命中（查询含类型词如"站点"，召回该类型全部实体）
+        # 2a) 种子匹配分三类：实体名 / 实体类型 / 关系类型
+        name_seeds: list[str] = []
+        type_seeds: list[str] = []
+        rel_seeds: list[str] = []
+        matched_rel_types: list[str] = []
         for kb_id in allowed:
             entities, _ = gstore.list_entities(kb_id, limit=1000, offset=0)
             for e in entities:
                 name = str(e.get("name", ""))
                 if name and name in query:
-                    seed_names.append(name)
+                    name_seeds.append(name)
             type_names = {str(e.get("type", "")) for e in entities if e.get("type")}
             for t in type_names:
                 # 查询包含类型全名或类型名前两字（如"店铺名称"→"店铺"），召回该类型全部实体
                 if (t and t in query) or (len(t) >= 2 and t[:2] in query):
-                    seed_names.extend(
+                    type_seeds.extend(
                         str(e["name"]) for e in entities
                         if str(e.get("type", "")) == t and str(e.get("name", ""))
                     )
-            # 关系类型命中：查询含关系类型（如"产品"），召回该关系两端的实体
             rels, _ = gstore.list_relations(kb_id, limit=1000, offset=0)
             for r in rels:
                 rt = str(r.get("relation_type", ""))
                 if not rt:
                     continue
                 if (rt in query) or (len(rt) >= 2 and rt[:2] in query):
+                    matched_rel_types.append(rt)
                     src = gstore.get_entity(str(r.get("source_entity_id", "")))
                     tgt = gstore.get_entity(str(r.get("target_entity_id", "")))
                     if src and str(src.get("name", "")):
-                        seed_names.append(str(src["name"]))
+                        rel_seeds.append(str(src["name"]))
                     if tgt and str(tgt.get("name", "")):
-                        seed_names.append(str(tgt["name"]))
+                        rel_seeds.append(str(tgt["name"]))
         # 2b) LLM 提取查询实体（有配置时）
         llm = llm_svc.resolve_llm(settings)
         if llm.configured():
             try:
-                seed_names.extend(llm_svc.query_entities(llm, query))
+                name_seeds.extend(llm_svc.query_entities(llm, query))
             except Exception:
                 pass
-        seed_names = list(dict.fromkeys(n for n in seed_names if n))
+        seed_names = list(dict.fromkeys(n for n in (name_seeds + type_seeds + rel_seeds) if n))
         if seed_names:
-            entities, relations = gstore.subgraph(allowed, seed_names, graph_depth)
+            # 精度控制（避免带出无关邻居）：
+            # - 纯"列举"查询（仅类型/关系类型命中，如"站点有哪些""产品"）→ 不扩展（深度0），只返回命中的实体与它们之间的关系
+            # - 指名实体查询（如"加拿大"）→ 按 graph_depth 扩展，且只沿查询中提到的关系类型展开；查询未提关系类型则不扩展
+            if name_seeds:
+                depth_eff = graph_depth if matched_rel_types else 0
+                rel_filter = list(dict.fromkeys(matched_rel_types)) or None
+            else:
+                depth_eff = 0
+                rel_filter = None
+            entities, relations = gstore.subgraph(allowed, seed_names, depth_eff, rel_filter)
             graph = {"entities": entities, "relations": relations}
             for e in entities:
                 if e.get("source_chunk_id"):
