@@ -123,25 +123,31 @@ class LocalGraphStore(GraphStore):
     def upsert_relation(self, kb_id: int, src_name: str, tgt_name: str,
                         rel_type: str, properties: dict,
                         source_doc_id: int | None, source_chunk_id: int | None) -> str:
+        """同一对实体之间只保留一条关系：已存在则更新关系类型（编辑语义），不再新增重复边。"""
         with self._lock:
             src = self._entity_id(kb_id, src_name)
             tgt = self._entity_id(kb_id, tgt_name)
             if src is None or tgt is None:
                 raise ValueError(f"实体不存在: {src_name} -> {tgt_name}")
             for rid, r in self._relations.items():
-                if (r["source_entity_id"] == src and r["target_entity_id"] == tgt
-                        and r["relation_type"] == rel_type and r["kb_id"] == kb_id):
+                if r["source_entity_id"] == src and r["target_entity_id"] == tgt \
+                        and r["kb_id"] == kb_id:
+                    # 同对实体已有关联：更新关系类型（覆盖旧类型），保留来源信息
+                    r["relation_type"] = rel_type
+                    if properties:
+                        r.setdefault("properties", {}).update(properties)
                     r.setdefault("source_doc_id", source_doc_id)
-                    self._save()
-                    return rid
-            rid = uuid.uuid4().hex
-            self._relations[rid] = {
-                "id": rid, "kb_id": kb_id, "source_entity_id": src,
-                "target_entity_id": tgt, "relation_type": rel_type,
-                "properties": properties or {}, "source_doc_id": source_doc_id,
-                "source_chunk_id": source_chunk_id, "verified": False,
-                "created_at": self._now(),
-            }
+                    r.setdefault("source_chunk_id", source_chunk_id)
+                    break
+            else:
+                rid = uuid.uuid4().hex
+                self._relations[rid] = {
+                    "id": rid, "kb_id": kb_id, "source_entity_id": src,
+                    "target_entity_id": tgt, "relation_type": rel_type,
+                    "properties": properties or {}, "source_doc_id": source_doc_id,
+                    "source_chunk_id": source_chunk_id, "verified": False,
+                    "created_at": self._now(),
+                }
         self._save()
         return rid
 
@@ -322,16 +328,21 @@ class Neo4jGraphStore(GraphStore):
     def upsert_relation(self, kb_id: int, src_name: str, tgt_name: str,
                         rel_type: str, properties: dict,
                         source_doc_id: int | None, source_chunk_id: int | None) -> str:
+        """同一对实体之间只保留一条关系：已存在则更新关系类型（覆盖旧类型），不新增重复边。"""
         from uuid import uuid4
         result = self._run(
             """MATCH (s:Entity {kb_id: $kb_id, name: $src}),
                       (t:Entity {kb_id: $kb_id, name: $tgt})
-               MERGE (s)-[r:REL {type: $rel_type}]->(t)
-               ON CREATE SET r.id = $rid, r.kb_id = $kb_id,
-                             r.source_doc_id = $source_doc_id,
-                             r.source_chunk_id = $source_chunk_id,
-                             r.verified = false, r.created_at = datetime()
-               RETURN r.id AS id""",
+               OPTIONAL MATCH (s)-[r:REL]->(t)
+               FOREACH (_ IN CASE WHEN r IS NULL THEN [1] ELSE [] END |
+                   CREATE (s)-[r2:REL {id: $rid, kb_id: $kb_id,
+                       source_doc_id: $source_doc_id, source_chunk_id: $source_chunk_id,
+                       verified: false, created_at: datetime()}]->(t)
+               )
+               FOREACH (_ IN CASE WHEN r IS NOT NULL THEN [1] ELSE [] END |
+                   SET r.type = $rel_type
+               )
+               RETURN coalesce(r.id, $rid) AS id""",
             kb_id=kb_id, src=src_name, tgt=tgt_name, rel_type=rel_type,
             rid=uuid4().hex, source_doc_id=source_doc_id, source_chunk_id=source_chunk_id,
         )

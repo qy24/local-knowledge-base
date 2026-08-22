@@ -30,6 +30,9 @@ os.environ["VECTOR_BACKEND"] = "local"
 os.environ["GRAPH_BACKEND"] = "local"
 os.environ["DATABASE_URL"] = "sqlite:///./test_live.db"
 os.environ["DATA_DIR"] = "./test_live_data"
+# 测试进程直连本机服务，禁用任何代理（CI/沙箱环境常见干扰源）
+os.environ["NO_PROXY"] = "*"
+os.environ["no_proxy"] = "*"
 
 for _p in ("test_live.db", "test_live_data"):
     if os.path.isdir(_p):
@@ -91,7 +94,7 @@ BASE = f"http://127.0.0.1:{APP_PORT}"
 def _post(path: str, json_body: dict | None = None, token: str | None = None,
           files: dict | None = None) -> httpx.Response:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    with httpx.Client(timeout=60) as c:
+    with httpx.Client(timeout=60, trust_env=False) as c:
         if files:
             return c.post(BASE + path, headers=headers, files=files)
         return c.post(BASE + path, headers=headers, json=json_body)
@@ -99,7 +102,7 @@ def _post(path: str, json_body: dict | None = None, token: str | None = None,
 
 def _get(path: str, token: str | None = None) -> httpx.Response:
     headers = {"Authorization": f"Bearer {token}"} if token else {}
-    with httpx.Client(timeout=60) as c:
+    with httpx.Client(timeout=60, trust_env=False) as c:
         return c.get(BASE + path, headers=headers)
 
 
@@ -263,7 +266,7 @@ def _mcp_check(key: str) -> None:
     async def run():
         async with streamable_http_client(
             f"http://127.0.0.1:{APP_PORT}/mcp",
-            http_client=httpx.AsyncClient(headers={"Authorization": f"Bearer {key}"}),
+            http_client=httpx.AsyncClient(headers={"Authorization": f"Bearer {key}"}, trust_env=False),
         ) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
@@ -297,7 +300,7 @@ def _mcp_check_bad_key() -> None:
         try:
             async with streamable_http_client(
                 f"http://127.0.0.1:{APP_PORT}/mcp",
-                http_client=httpx.AsyncClient(headers={"Authorization": "Bearer sk-invalid"}),
+                http_client=httpx.AsyncClient(headers={"Authorization": "Bearer sk-invalid"}, trust_env=False),
             ) as (read, write, _):
                 async with ClientSession(read, write) as session:
                     await session.initialize()

@@ -50,8 +50,15 @@ def test_local_graph_store_incremental_persistence():
     rels, rtotal = b.list_relations(1, 100, 0)
     assert rtotal == 1, f"重启后关系丢失: {rtotal}"
 
+    # 覆盖语义：同一对实体改关系类型，只保留一条（不新增重复边）
+    b.upsert_relation(kb_id=1, src_name="设备A", tgt_name="维护周期", rel_type="需要",
+                      properties={}, source_doc_id=None, source_chunk_id=None)
+    rels2, rtotal2 = b.list_relations(1, 100, 0)
+    assert rtotal2 == 1, f"改类型后不应新增重复关系: {rtotal2}"
+    assert rels2[0]["relation_type"] == "需要", rels2
+
     # 删除与合并也要立即落盘
-    b.delete_relation(rels[0]["id"])
+    b.delete_relation(rels2[0]["id"])
     b.delete_entity(e2)
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)

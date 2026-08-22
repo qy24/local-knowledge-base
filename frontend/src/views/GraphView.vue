@@ -57,7 +57,10 @@
               <div v-for="r in selectedRelations" :key="r.id"
                    style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0">
                 <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ relLabel(r) }}</span>
-                <el-button size="small" type="danger" link @click="deleteRelation(r)">删除</el-button>
+                <span style="flex-shrink:0">
+                  <el-button size="small" type="primary" link @click="openEditRelation(r)">编辑</el-button>
+                  <el-button size="small" type="danger" link @click="deleteRelation(r)">删除</el-button>
+                </span>
               </div>
             </div>
             <div v-if="imageUrl" style="margin-top: 8px">
@@ -80,6 +83,21 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-dialog v-model="editRelDialog" title="编辑关系类型" width="360px">
+      <el-form label-width="80px" size="small">
+        <el-form-item label="关系">
+          <span v-if="editRelTarget" style="font-size: 12px; color: #606266">{{ relLabel(editRelTarget) }}</span>
+        </el-form-item>
+        <el-form-item label="关系类型">
+          <el-input v-model="editRelType" placeholder="如：配图 / 属于 / 依赖" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editRelDialog = false">取消</el-button>
+        <el-button type="primary" :disabled="!editRelType" @click="saveRelationType">保存</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="mergeDialog" title="合并实体" width="420px">
       <p style="font-size: 13px; color: #666">
@@ -191,6 +209,25 @@ async function deleteRelation(r: RelationItem) {
   await load()
 }
 
+// 编辑关系类型
+const editRelDialog = ref(false)
+const editRelType = ref('')
+const editRelTarget = ref<RelationItem | null>(null)
+
+function openEditRelation(r: RelationItem) {
+  editRelTarget.value = r
+  editRelType.value = r.relation_type
+  editRelDialog.value = true
+}
+
+async function saveRelationType() {
+  if (!editRelTarget.value || !editRelType.value) return
+  await client.patch(`/admin/relations/${editRelTarget.value.id}`, { relation_type: editRelType.value })
+  ElMessage.success('已更新关系类型')
+  editRelDialog.value = false
+  await load()
+}
+
 async function load() {
   if (!kbId.value) return
   const [eRes, rRes] = await Promise.all([
@@ -204,17 +241,33 @@ async function load() {
 
 function renderGraph() {
   if (!container.value) return
+  // 记录当前画布各节点坐标（重绘后保持位置不乱动）
+  const posMap = new Map<string, { x: number; y: number }>()
   if (graph) {
+    graph.getNodes().forEach((n: any) => {
+      const m = n.getModel()
+      posMap.set(m.id, { x: m.x, y: m.y })
+    })
     graph.destroy()
     graph = null
   }
-  const nodes = entities.value.map((e) => ({
-    id: e.id,
-    label: e.name,
-    type: e.type,
-    style: { fill: e.verified ? '#67c23a' : '#409eff', stroke: '#333' },
-    size: 26,
-  }))
+  const w = container.value.clientWidth
+  const h = container.value.clientHeight
+  const nodes = entities.value.map((e, i) => {
+    const saved = (e.properties as any) || {}
+    const pos = posMap.get(e.id) || saved
+    const x = typeof pos.x === 'number' ? pos.x : 80 + ((i * 97) % Math.max(w - 160, 100))
+    const y = typeof pos.y === 'number' ? pos.y : 80 + ((i * 53) % Math.max(h - 160, 100))
+    return {
+      id: e.id,
+      label: e.name,
+      type: e.type,
+      x,
+      y,
+      style: { fill: e.verified ? '#67c23a' : '#409eff', stroke: '#333' },
+      size: 26,
+    }
+  })
   const edges = relations.value.map((r) => ({
     source: r.source_entity_id,
     target: r.target_entity_id,
@@ -228,7 +281,7 @@ function renderGraph() {
       height: container.value!.clientHeight,
       fitView: true,
       modes: { default: ['drag-canvas', 'zoom-canvas', 'drag-node'] },
-      layout: { type: 'force', preventOverlap: true, linkDistance: 120 },
+      layout: { type: 'none' },  // 不自动重排，保持节点位置
       defaultNode: { type: 'circle', labelCfg: { style: { fontSize: 11 } } },
       defaultEdge: { labelCfg: { autoRotate: true, style: { fontSize: 9 } } },
       data: { nodes, edges },
@@ -238,6 +291,15 @@ function renderGraph() {
       selected.value = entities.value.find((e) => e.id === model.id) || null
       relTargetId.value = ''
       loadRelatedChunk()
+    })
+    // 拖拽结束后把坐标写入实体属性（自动持久化，刷新/保存后位置不变）
+    graph.on('node:dragend', (evt: any) => {
+      const model = evt.item.getModel()
+      const ent = entities.value.find((e) => e.id === model.id)
+      if (!ent) return
+      const props = { ...(ent.properties || {}), x: Math.round(model.x), y: Math.round(model.y) }
+      ent.properties = props
+      client.patch(`/admin/entities/${ent.id}`, { properties: props }).catch(() => {})
     })
     graph.render()
   })
