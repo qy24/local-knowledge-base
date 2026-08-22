@@ -41,13 +41,21 @@ def search_knowledge(
     verified_chunk_ids: set[int] = set()
     if enable_graph and allowed:
         seed_names: list[str] = []
-        # 2a) 字符串命中实体名（无需 LLM，稳定兜底）
+        # 2a) 字符串命中实体名 + 实体类型命中（查询含类型词如"站点"，召回该类型全部实体）
         for kb_id in allowed:
             entities, _ = gstore.list_entities(kb_id, limit=1000, offset=0)
             for e in entities:
                 name = str(e.get("name", ""))
                 if name and name in query:
                     seed_names.append(name)
+            type_names = {str(e.get("type", "")) for e in entities if e.get("type")}
+            for t in type_names:
+                # 查询包含类型全名或类型名前两字（如"店铺名称"→"店铺"），召回该类型全部实体
+                if (t and t in query) or (len(t) >= 2 and t[:2] in query):
+                    seed_names.extend(
+                        str(e["name"]) for e in entities
+                        if str(e.get("type", "")) == t and str(e.get("name", ""))
+                    )
         # 2b) LLM 提取查询实体（有配置时）
         llm = llm_svc.resolve_llm(settings)
         if llm.configured():

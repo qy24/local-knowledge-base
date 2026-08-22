@@ -155,6 +155,13 @@ def test_full_pipeline_and_tenant_isolation():
                         headers={"Authorization": "Bearer sk-invalid"})
         assert r.status_code == 401
 
+        # 检索调试台（回归：曾因审计参数把 request 传入 api_key_id 导致 500）
+        r = client.post(f"/api/admin/kbs/{kb1}/debug-search",
+                        json={"query": "维护", "top_k": 5, "graph_depth": 1, "enable_graph": True},
+                        headers=auth)
+        assert r.status_code == 200, r.text
+        assert r.json()["permission_scope"]["kb_ids"] == [kb1]
+
         # 审计日志有记录
         audit = client.get("/api/admin/audit", headers=auth).json()
         actions = {a["action"] for a in audit["items"]}

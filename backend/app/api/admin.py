@@ -392,7 +392,7 @@ def debug_search(kb_id: int, body: SearchIn, db: Session = Depends(get_db),
         graph_depth=body.graph_depth, enable_graph=body.enable_graph,
     )
     _audit(db, user, "debug.search", body.query,
-           {"hits": len(result["chunks"])}, request)
+           {"hits": len(result["chunks"])}, request=request)
     return result
 
 

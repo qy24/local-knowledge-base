@@ -1,8 +1,15 @@
 """应用配置：从环境变量 / .env 读取。"""
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# 本地回环地址（本机 Ollama 等本地嵌入/模型服务）不走代理；
+# 云端地址（api.openai.com 等）仍遵循系统/环境代理配置。
+# 避免系统代理或沙箱代理把发往 127.0.0.1 的请求劫持导致 400/500。
+os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost")
+os.environ.setdefault("no_proxy", "127.0.0.1,localhost")
 
 
 class Settings(BaseSettings):
