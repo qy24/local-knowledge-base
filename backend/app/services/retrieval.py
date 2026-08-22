@@ -45,10 +45,12 @@ def search_knowledge(
         type_seeds: list[str] = []
         rel_seeds: list[str] = []
         matched_rel_types: list[str] = []
+        ids_by_name: dict[str, list[str]] = {}  # 实体名 -> [实体id]，用于邻域约束
         for kb_id in allowed:
             entities, _ = gstore.list_entities(kb_id, limit=1000, offset=0)
             for e in entities:
                 name = str(e.get("name", ""))
+                ids_by_name.setdefault(name, []).append(e["id"])
                 if name and name in query:
                     name_seeds.append(name)
             type_names = {str(e.get("type", "")) for e in entities if e.get("type")}
@@ -72,6 +74,19 @@ def search_knowledge(
                         rel_seeds.append(str(src["name"]))
                     if tgt and str(tgt.get("name", "")):
                         rel_seeds.append(str(tgt["name"]))
+        # 2a-邻域约束：查询同时点名实体与类型词时（如"美国站的ASIN"），
+        # 类型实体必须与点名实体在图谱中相连，避免跨站/跨主题误召回
+        if name_seeds and type_seeds:
+            name_seed_unique = list(dict.fromkeys(name_seeds))
+            nbr_entities, _ = gstore.subgraph(
+                allowed, name_seed_unique, min(max(graph_depth, 1) + 1, 3), None)
+            nbr_ids = {e["id"] for e in nbr_entities}
+            for n in name_seed_unique:
+                nbr_ids.update(ids_by_name.get(n, []))
+            type_seeds = [
+                s for s in type_seeds
+                if set(ids_by_name.get(s, [])) & nbr_ids
+            ]
         # 2b) LLM 提取查询实体（有配置时）
         llm = llm_svc.resolve_llm(settings)
         if llm.configured():
