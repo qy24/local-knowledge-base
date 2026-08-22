@@ -28,6 +28,42 @@
                 </el-tooltip>
               </el-form-item>
             </el-form>
+            <div style="margin-top: 8px">
+              <el-divider content-position="left">新增关系（可连续添加多个）</el-divider>
+              <el-form label-width="70px" size="small">
+                <el-form-item label="关系类型">
+                  <el-input v-model="relType" placeholder="如：配图 / 属于 / 依赖" />
+                </el-form-item>
+                <el-form-item label="方向">
+                  <el-select v-model="relDirection" style="width: 100%">
+                    <el-option label="本实体 → 目标（出）" value="out" />
+                    <el-option label="目标 → 本实体（入）" value="in" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item label="目标实体">
+                  <el-select v-model="relTargetId" filterable style="width: 100%" placeholder="选择目标实体">
+                    <el-option v-for="e in entities.filter((x) => x.id !== selected?.id)" :key="e.id"
+                               :label="e.name + '（' + e.type + '）'" :value="e.id" />
+                  </el-select>
+                </el-form-item>
+                <el-form-item>
+                  <el-button type="success" size="small" :disabled="!relType || !relTargetId"
+                             @click="addRelationFromSelected">添加关系</el-button>
+                  <span style="color:#909399;font-size:12px;margin-left:6px">添加后自动刷新画布，可继续添加下一个</span>
+                </el-form-item>
+              </el-form>
+              <el-divider content-position="left">已建立关系（{{ selectedRelations.length }}）</el-divider>
+              <div v-if="selectedRelations.length === 0" style="color:#c0c4cc;font-size:12px">暂无关系</div>
+              <div v-for="r in selectedRelations" :key="r.id"
+                   style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:2px 0">
+                <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ relLabel(r) }}</span>
+                <el-button size="small" type="danger" link @click="deleteRelation(r)">删除</el-button>
+              </div>
+            </div>
+            <div v-if="imageUrl" style="margin-top: 8px">
+              <el-divider content-position="left">产品图片</el-divider>
+              <img :src="imageUrl" style="max-width: 100%; border-radius: 4px" />
+            </div>
             <div v-if="relatedChunk" style="margin-top: 8px">
               <el-divider content-position="left">关联原文</el-divider>
               <div style="font-size: 12px; color: #666; max-height: 200px; overflow: auto; white-space: pre-wrap">
@@ -93,7 +129,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute } from 'vue-router'
 import client from '../api/client'
@@ -107,14 +143,53 @@ const entities = ref<EntityItem[]>([])
 const relations = ref<RelationItem[]>([])
 const selected = ref<EntityItem | null>(null)
 const relatedChunk = ref<ChunkItem | null>(null)
+const imageUrl = ref('')
 const addEntityDialog = ref(false)
 const addRelationDialog = ref(false)
 const mergeDialog = ref(false)
 const mergeTargetId = ref('')
 const newEntity = reactive({ name: '', type: '术语' })
 const newRelation = reactive({ source_entity_id: '', target_entity_id: '', relation_type: '' })
+// 实体面板"新增关系"表单（可连续添加多个）
+const relType = ref('')
+const relTargetId = ref('')
+const relDirection = ref('out')
 
 let graph: any = null
+
+// 选中实体已有的全部关系（出 + 入）
+const selectedRelations = computed(() => {
+  if (!selected.value) return []
+  return relations.value.filter(
+    (r) => r.source_entity_id === selected.value!.id || r.target_entity_id === selected.value!.id,
+  )
+})
+
+function entityName(id: string): string {
+  return entities.value.find((e) => e.id === id)?.name || id.slice(0, 8)
+}
+
+function relLabel(r: RelationItem): string {
+  return `${entityName(r.source_entity_id)} -${r.relation_type}-> ${entityName(r.target_entity_id)}`
+}
+
+async function addRelationFromSelected() {
+  if (!selected.value || !relType.value || !relTargetId.value) return
+  const payload = relDirection.value === 'out'
+    ? { source_entity_id: selected.value.id, target_entity_id: relTargetId.value, relation_type: relType.value }
+    : { source_entity_id: relTargetId.value, target_entity_id: selected.value.id, relation_type: relType.value }
+  await client.post(`/admin/kbs/${kbId.value}/relations`, payload)
+  ElMessage.success('已添加关系')
+  await load()
+  relTargetId.value = ''   // 保留关系类型，可继续添加下一个
+}
+
+async function deleteRelation(r: RelationItem) {
+  await ElMessageBox.confirm('删除这条关系？', '确认', { type: 'warning' })
+  await client.delete(`/admin/relations/${r.id}`)
+  ElMessage.success('已删除')
+  await load()
+}
 
 async function load() {
   if (!kbId.value) return
@@ -161,6 +236,7 @@ function renderGraph() {
     graph.on('node:click', (evt: any) => {
       const model = evt.item.getModel()
       selected.value = entities.value.find((e) => e.id === model.id) || null
+      relTargetId.value = ''
       loadRelatedChunk()
     })
     graph.render()
@@ -169,7 +245,22 @@ function renderGraph() {
 
 async function loadRelatedChunk() {
   relatedChunk.value = null
-  if (!selected.value?.source_chunk_id) return
+  if (imageUrl.value) {
+    URL.revokeObjectURL(imageUrl.value)
+    imageUrl.value = ''
+  }
+  if (!selected.value) return
+  // 图片实体：显示原图
+  const imgDocId = selected.value.properties?.image_doc_id
+  if (imgDocId) {
+    try {
+      const resp = await client.get(`/admin/documents/${imgDocId}/file`, { responseType: 'blob' })
+      imageUrl.value = URL.createObjectURL(resp.data)
+    } catch {
+      /* 图片加载失败不阻塞 */
+    }
+  }
+  if (!selected.value.source_chunk_id) return
   const { data } = await client.get(`/admin/chunks/${selected.value.source_chunk_id}`)
   relatedChunk.value = data
 }
