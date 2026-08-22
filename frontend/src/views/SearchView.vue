@@ -10,9 +10,6 @@
       <el-button type="primary" :disabled="!kbId || !query" @click="run">检 索</el-button>
     </div>
 
-    <el-alert v-if="result" type="info" :closable="false" style="margin-bottom: 12px"
-              :title="`实际生效范围: 知识库 #${result.permission_scope.kb_ids.join(', ')}；图谱命中实体 ${result.graph.entities.length} 个 / 关系 ${result.graph.relations.length} 条`" />
-
     <template v-if="result">
       <el-alert type="info" :closable="false" style="margin-bottom: 12px"
                 :title="`实际生效范围: 知识库 #${result.permission_scope.kb_ids.join(', ')}；图谱命中实体 ${result.graph.entities.length} 个 / 关系 ${result.graph.relations.length} 条`" />
